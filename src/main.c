@@ -86,12 +86,11 @@ int main(int argc, char *argv[]) {
                 exit(EXIT_FAILURE);
             }
             if (verbose_flag)
-                log_debug("Messages received = %d, Messages sent = %d", messages_received, messages_sent);
+                log_debug("Messages sent: %zu, messages received: %zu.", messages_sent, messages_received);
         }
     }
 
-    if (verbose_flag)
-        log_info("Messages sent: %zu, messages received: %zu.", messages_sent, messages_received);
+    // log_info("Messages sent: %zu, messages received: %zu.", messages_sent, messages_received);
 
     int exitCode = (tcp_client_close(sockfd) != EXIT_SUCCESS) ? EXIT_FAILURE : EXIT_SUCCESS;
     if (verbose_flag)

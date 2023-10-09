@@ -113,29 +113,22 @@ int tcp_client_connect(Config config) {
     return sockfd;
 }
 
+
 // Helper function to convert action to its binary representation
 static uint32_t action_to_binary(char *action) {
-    if (strcmp(action, "uppercase") == 0) return 0x01;
-    if (strcmp(action, "lowercase") == 0) return 0x02;
-    if (strcmp(action, "reverse") == 0) return 0x04;
-    if (strcmp(action, "shuffle") == 0) return 0x08;
-    if (strcmp(action, "random") == 0) return 0x10;
-    return 0;  // Default case (should not happen)
+    return  (strcmp(action, "uppercase") == 0) ? 0x01 :
+            (strcmp(action, "lowercase") == 0) ? 0x02 :
+            (strcmp(action, "reverse") == 0) ? 0x04 :
+            (strcmp(action, "shuffle") == 0) ? 0x08 :
+            (strcmp(action, "random") == 0) ? 0x10 :
+            0;  // Default case, shouldn't happen
 }
+
 
 // Creates and sends a request to the server using the socket and configuration.
 int tcp_client_send_request(int sockfd, char *action, char *message) {
-    // Convert the action to its binary representation
-    uint32_t binary_action = action_to_binary(action);
-
-    // Calculate the message length
-    uint32_t message_length = strlen(message);
-
-    // Create the request header
-    uint32_t header = (binary_action << 27) | message_length;
-
     // Convert the header to big-endian format
-    uint32_t header_big_endian = htonl(header);
+    uint32_t header_big_endian = htonl((action_to_binary(action) << 27) | strlen(message));
 
     // Send the header
     if (send(sockfd, &header_big_endian, sizeof(header_big_endian), 0) == -1) {
@@ -144,7 +137,7 @@ int tcp_client_send_request(int sockfd, char *action, char *message) {
     }
 
     // Send the message
-    if (send(sockfd, message, message_length, 0) == -1) {
+    if (send(sockfd, message, strlen(message), 0) == -1) {
         log_error("Message send failed.");
         return EXIT_FAILURE;
     }
@@ -154,7 +147,6 @@ int tcp_client_send_request(int sockfd, char *action, char *message) {
 
     return EXIT_SUCCESS;
 }
-
 
 
 // Receives the response from the server. The caller must provide a callback function to handle the response.
