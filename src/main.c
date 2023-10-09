@@ -17,8 +17,9 @@ static void printHelpOption(char *argv[]) {
 
 // Handler for server responses
 static int handle_response(char *response) {
-    log_trace("%s\n", response);
-    return (messages_sent > ++messages_received) ? EXIT_SUCCESS : EXIT_FAILURE;
+    log_trace("%s", response);
+    messages_received++;
+    return EXIT_SUCCESS;  // Return success as receiving a response is the expected behavior
 }
 
 int main(int argc, char *argv[]) {
@@ -30,6 +31,7 @@ int main(int argc, char *argv[]) {
     // Parse command-line arguments
     if (tcp_client_parse_arguments(argc, argv, &config)) {
         printHelpOption(argv);
+        log_error("Error");
         exit(EXIT_FAILURE);
     }
 
@@ -60,6 +62,7 @@ int main(int argc, char *argv[]) {
             free(message);
             if (fp != stdin) tcp_client_close_file(fp);
             tcp_client_close(sockfd);
+            log_error("Error");
             return EXIT_FAILURE;
         }
         messages_sent++;
@@ -69,19 +72,29 @@ int main(int argc, char *argv[]) {
     }
 
     if (verbose_flag)
-        log_info("Messages sent: %zu, messages received: %zu.", messages_sent, messages_received);
+        log_info("Messages sent: %zu.", messages_sent);
 
     if (fp != stdin)
         tcp_client_close_file(fp);
 
-// Only attempt to receive if we sent messages
+    // Only attempt to receive if we sent messages
     if (messages_sent > 0) {
-        if (tcp_client_receive_response(sockfd, handle_response) != EXIT_SUCCESS) {
-            tcp_client_close(sockfd);
-            exit(EXIT_FAILURE);
+        while (messages_received < messages_sent) {
+            if (tcp_client_receive_response(sockfd, handle_response) != EXIT_SUCCESS) {
+                tcp_client_close(sockfd);
+                log_error("Error");
+                exit(EXIT_FAILURE);
+            }
+            if (verbose_flag)
+                log_debug("Messages received = %d, Messages sent = %d", messages_received, messages_sent);
         }
     }
 
-    exit((tcp_client_close(sockfd) != EXIT_SUCCESS) ? EXIT_FAILURE : EXIT_SUCCESS);
+    if (verbose_flag)
+        log_info("Messages sent: %zu, messages received: %zu.", messages_sent, messages_received);
 
+    int exitCode = (tcp_client_close(sockfd) != EXIT_SUCCESS) ? EXIT_FAILURE : EXIT_SUCCESS;
+    if (verbose_flag)
+        log_debug("Exit code = %d", exitCode);
+    exit(exitCode);
 }

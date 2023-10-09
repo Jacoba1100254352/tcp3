@@ -248,7 +248,8 @@ int tcp_client_get_line(FILE *fd, char **action, char **message) {
     ssize_t charCount = getline(&stringLine, &readIn, fd);
 
     if (charCount == -1) {
-        log_warn("No line was read from file, program likely reached the end of the file.");
+        if (verbose_flag)
+            log_warn("No line was read from file, program likely reached the end of the file.");
         free(stringLine); // Safe to call even if getline failed
         return EXIT_FAILURE;
     }
