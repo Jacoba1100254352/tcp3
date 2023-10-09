@@ -19,6 +19,7 @@
 #define TCP_CLIENT_DEFAULT_HOST "localhost"
 #define TCP_CLIENT_REQUEST_HEADER_SIZE 4
 #define TCP_CLIENT_RESPONSE_HEADER_SIZE 4
+#define TCP_CLIENT_MAX_INPUT_SIZE 1024
 
 /**
  * @brief Contains all of the information needed to connect to the server and send it a message.
