@@ -113,76 +113,90 @@ int tcp_client_connect(Config config) {
     return sockfd;
 }
 
+// Helper function to convert action to its binary representation
+static uint32_t action_to_binary(char *action) {
+    if (strcmp(action, "uppercase") == 0) return 0x01;
+    if (strcmp(action, "lowercase") == 0) return 0x02;
+    if (strcmp(action, "reverse") == 0) return 0x04;
+    if (strcmp(action, "shuffle") == 0) return 0x08;
+    if (strcmp(action, "random") == 0) return 0x10;
+    return 0;  // Default case (should not happen)
+}
+
 // Creates and sends a request to the server using the socket and configuration.
 int tcp_client_send_request(int sockfd, char *action, char *message) {
-    size_t msgSize = strlen(action) + strlen(message) + 10;
-    char *msg = malloc(msgSize);
-    if (!msg) {
-        log_error("Memory allocation failed.");
+    // Convert the action to its binary representation
+    uint32_t binary_action = action_to_binary(action);
+
+    // Calculate the message length
+    uint32_t message_length = strlen(message);
+
+    // Create the request header
+    uint32_t header = (binary_action << 27) | message_length;
+
+    // Convert the header to big-endian format
+    uint32_t header_big_endian = htonl(header);
+
+    // Send the header
+    if (send(sockfd, &header_big_endian, sizeof(header_big_endian), 0) == -1) {
+        log_error("Header send failed.");
         return EXIT_FAILURE;
     }
-    sprintf(msg, "%s %lu %s", action, strlen(message), message);
 
-    if (send(sockfd, msg, strlen(msg), 0) == -1) {
-        log_error("Send failed.");
-        // After sending the message, free the dynamically allocated memory
-        free(msg);
+    // Send the message
+    if (send(sockfd, message, message_length, 0) == -1) {
+        log_error("Message send failed.");
         return EXIT_FAILURE;
     }
 
     if (verbose_flag)
         log_info("Request sent");
 
-    // After sending the message, free the dynamically allocated memory
-    free(msg);
-
     return EXIT_SUCCESS;
 }
 
 
+
 // Receives the response from the server. The caller must provide a callback function to handle the response.
 int tcp_client_receive_response(int sockfd, int (*handle_response)(char *)) {
-    char *space_position = NULL;
-    size_t numBytesInBuffer = 0;
-    size_t messageLength = 0;
-    unsigned bufferSize = TCP_CLIENT_MAX_INPUT_SIZE;
-    char *buffer = malloc(bufferSize);
-    buffer[0] = '\0';
+    uint32_t header_big_endian;
+    uint32_t message_length;
 
-    while (true) {
-        // Resize buffer if needed
-        if (numBytesInBuffer > bufferSize / 2) {
-            bufferSize *= 2;
-            buffer = realloc(buffer, bufferSize);
-        }
-
-        int numbytes = recv(sockfd, buffer + numBytesInBuffer, bufferSize - numBytesInBuffer - 1, 0);
-        if (numbytes <= 0) {
-            free(buffer);
-            return (numbytes == 0) ? 0 : -1; // Return 0 if connection closed, -1 if error
-        }
-        numBytesInBuffer += numbytes;
-        buffer[numBytesInBuffer] = '\0';
-
-        while ((space_position = strchr(buffer, ' ')) && sscanf(buffer, "%zu", &messageLength) == 1) {
-            char *message_start = space_position + 1;
-            if (message_start + messageLength <= buffer + numBytesInBuffer) {
-                char *response_message = strndup(message_start, messageLength);
-                if (handle_response(response_message)) {
-                    free(response_message);
-                    free(buffer);
-                    return 0; // All messages processed
-                }
-                free(response_message);
-
-                // Adjust buffer
-                numBytesInBuffer -= (message_start + messageLength - buffer);
-                memmove(buffer, message_start + messageLength, numBytesInBuffer);
-            } else {
-                break;  // Not enough data for a full message, wait for more
-            }
-        }
+    // Receive the header
+    if (recv(sockfd, &header_big_endian, sizeof(header_big_endian), 0) != sizeof(header_big_endian)) {
+        log_error("Header receive failed.");
+        return EXIT_FAILURE;
     }
+
+    // Convert the header from big-endian format
+    message_length = ntohl(header_big_endian);
+
+    // Allocate buffer to store the message
+    char *buffer = malloc(message_length + 1);  // +1 for null-terminator
+    if (!buffer) {
+        log_error("Memory allocation failed.");
+        return EXIT_FAILURE;
+    }
+
+    // Receive the message
+    size_t received = 0;
+    while (received < message_length) {
+        int bytes = recv(sockfd, buffer + received, message_length - received, 0);
+        if (bytes <= 0) {
+            free(buffer);
+            log_error("Message receive failed.");
+            return EXIT_FAILURE;
+        }
+        received += bytes;
+    }
+    buffer[message_length] = '\0';  // Null-terminate the received message
+
+    // Handle the received message
+    int result = handle_response(buffer);
+
+    free(buffer);
+
+    return result;
 }
 
 
